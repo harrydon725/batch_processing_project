@@ -2,6 +2,13 @@
 ### Harry Donnelly
 *Please note that this is a repository is used for visualisation of a project on a cloud client - None of the code found in this repo will be functional without proper set up of databases, ec2 instance and proper dependency installation.*
 
+## Diagram
+
+> Me-EC2 Connection
+![alt text](image-1.png)
+> EC2-Airflow-RDS Communication
+![alt text](image.png)
+
 ## Tasks & Breakdown
 
 > Task 1: Cleaning the posts contents
@@ -40,9 +47,7 @@ Now we have a connection to the database, we can have a look at the what the tab
 5. Votes
 - Table of votes for a post - with post they relate to ID, the user(NULL on most records), vote_type and creation timestamp
 
-From the first two tasks at least, it seems we can stay completley within the posts table and make a cleaned version on the analytical one. This seems simple enough, however we are taking from one database to another, so we will need to bring the data out of the database rather than to a seperate table in the same database. As far as i know, postgresoperator doesnt expect a return or can handle one - so this might be a bit of a blocker if it comes to it. 
 
-Little bit of research on the above shwos postgreshook could work, and expects a result.
 
 ## Process of coding
 
@@ -78,9 +83,9 @@ def print_posts(**context):
 t1 >> t2
 ```
 
- With this we were able to see records in the logs for this, however this introduced a new potential problem. This took a long time to run, there are around 60 million posts in this table alone. So my thought with this would be to somehow reduce the amount of data we are taking in. Before attempting, the catchup arugment is coming to mind. This dag has to run every 15 mins or so, if we only query the posts that have had edits made since the last run (using current date minus 15 mins and comparing to last edit date), meaning we are only querying the necessary posts each run (other than the first which will catchup to the current date).
+With this we were able to see records in the logs, however this introduced a new potential problem. This took a long time to run, there are around 60 million posts in this table alone. So my thought with this would be to somehow reduce the amount of data we are taking in.
 
- I have now made a version of this that should take all the posts, remove any post with nothing in the body and input to the analytical database with only the requested columns. This is doing all the records, right after seeing the potential time problem, this is as I am curious about how long this will take, and if it is something we want to 100% avoid. You can see the new tasks below.
+I have now made a version of this that should take all the posts, remove any post with nothing in the body and input to the analytical database with only the requested columns. This is doing all the records, right after seeing the potential time problem, this is as I am curious about how long this will take, and if it is something we want to 100% avoid. You can see the new tasks below.
 
  ```python
 def clear_empty_body(**context):
@@ -101,7 +106,7 @@ def insert_posts(**context):
         title TEXT,
         body TEXT,
         owner_user_id BIGINT,
-        creation_date TIMESTAMP WITH TIME ZONE
+        creation_date TIMESTAMP
     );
     """
     hook.run(create_sql)
@@ -112,6 +117,10 @@ def insert_posts(**context):
         commit_every=1000
     )
  ```
+
+ This took a LONG time - given the EC2 instance size, we cant expect too much in terms of power, but they above ran for around 2 hours before completing, theres a lot of improvements that can be made - this dag is supposed to repeat every 15mins, which at the moment, would not be possible.
+ 
+ For this, we would need some way of only searching records that need searching for (Not in the prev dag runs). The matierial mentions keeping track of the last processed id and using that as a point of reference on what to query and what not to. As much as this will 100% work in this case, i do want to try other methods at this - This table has sequential IDs but not all dbs do. Also looking at the table, we have can see that the posts have a last edited column, this to me suggests the bodies of the posts are changeable and we could end up with out of date data in the analyticaldb.  
 
  
 
